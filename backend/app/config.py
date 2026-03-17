@@ -4,9 +4,16 @@ from typing import Optional
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     """
     Centralised application configuration pulled from environment variables (.env) and
     validated aggressively so that we fail fast when required Azure configuration is missing.
@@ -102,10 +109,6 @@ class Settings(BaseSettings):
     )
     AZURE_DOC_INTEL_ENDPOINT: AnyHttpUrl
     AZURE_DOC_INTEL_MODEL_ID: str = Field(default="prebuilt-layout")
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
     @field_validator("AZURE_OPENAI_AUTH_SCOPE")
     @classmethod
