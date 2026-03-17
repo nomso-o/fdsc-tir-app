@@ -3,10 +3,6 @@ import api, { extractApiError } from "../api/client";
 import ExportButtons from "./ExportButtons";
 import ThinkingDrawer from "./ThinkingDrawer";
 
-interface TIRAnalysisPanelProps {
-  sessionId: string;
-}
-
 interface PrefixOption {
   value: string;
   label: string;
@@ -23,7 +19,9 @@ interface TIRSingleResult {
   alignment_review: any;
 }
 
-const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
+const TIRAnalysisPanel: React.FC = () => {
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [fdscIndexName, setFdscIndexName] = useState("fdsc-index");
   const [datasetPrefix, setDatasetPrefix] = useState("");
   const [datasetOptions, setDatasetOptions] = useState<PrefixOption[]>([]);
@@ -95,14 +93,21 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
     setLoading(true);
     try {
       const payload: Record<string, any> = {
-        session_id: sessionId,
         fdsc_index_name: fdscIndexName,
         dataset_prefix: datasetPrefix
       };
+      if (sessionId && sessionToken) {
+        payload.session_id = sessionId;
+        payload.session_token = sessionToken;
+      }
       if (selectedDocId) {
         payload.fdsc_doc_id = selectedDocId;
       }
       const resp = await api.post("/tir/score", payload);
+      const resolvedSessionId = resp.data.session_id as string;
+      const resolvedSessionToken = resp.data.session_token as string;
+      setSessionId(resolvedSessionId);
+      setSessionToken(resolvedSessionToken);
       const res = resp.data.results as TIRSingleResult[];
       setResults(res);
       if (res.length > 0) {
@@ -127,10 +132,15 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
 
   const saveEdited = async () => {
     if (selectedIndex === null) return;
+    if (!sessionId || !sessionToken) {
+      setError("No active scoring session. Run scoring first.");
+      return;
+    }
     const tir = results[selectedIndex];
     try {
       await api.post("/tir/save", {
         session_id: sessionId,
+        session_token: sessionToken,
         tir_id: encodeURIComponent(tir.tir_blob_path),
         edited_markdown: editedMarkdown
       });
@@ -227,7 +237,7 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
               <div className="tir-actions">
                 <button onClick={saveEdited}>Save</button>
                 <button onClick={() => setThinkingOpen(true)}>Thinking</button>
-                <ExportButtons sessionId={sessionId} />
+                <ExportButtons sessionId={sessionId} sessionToken={sessionToken} />
               </div>
             </>
           ) : (

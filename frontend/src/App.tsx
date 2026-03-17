@@ -4,7 +4,7 @@ import TIRAnalysisPanel from "./components/TIRAnalysisPanel";
 import FDSCDocumentManager from "./components/FDSCDocumentManager";
 
 const App: React.FC = () => {
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [chatSessionId] = useState(() => crypto.randomUUID());
 
   return (
     <div className="app-container">
@@ -14,10 +14,10 @@ const App: React.FC = () => {
       <main className="app-main">
         <section className="main-left">
           <FDSCDocumentManager />
-          <TIRAnalysisPanel sessionId={sessionId} />
+          <TIRAnalysisPanel />
         </section>
         <section className="main-right">
-          <ChatPanel sessionId={sessionId} />
+          <ChatPanel sessionId={chatSessionId} />
         </section>
       </main>
     </div>

@@ -1,4 +1,5 @@
 import logging
+import re
 from uuid import uuid4
 from typing import List
 
@@ -31,12 +32,14 @@ from .services.storage_service import (
 )
 from .services.export_service import build_docx_from_results, build_pdf_from_results
 from .utils.rate_limit import enforce_rate_limit
+from .utils.session_tokens import issue_session_token, verify_session_token
 from .pipelines.fdsc_ingestion import ingest_fdsc_document
 
 setup_logging()
 settings = get_settings()
 logger = logging.getLogger(__name__)
 _ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+_TIR_SAVE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9/._ -]{1,256}$")
 _ALLOWED_UPLOAD_CONTENT_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -50,7 +53,7 @@ app = FastAPI(title="FDSC RAG & TIR Scoring App")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # tighten for prod
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -101,7 +104,7 @@ async def chat_message(req: ChatRequest):
 )
 async def tir_score(req: TIRScoreRequest):
     try:
-        session_id = req.session_id or str(uuid4())
+        session_id = _resolve_or_create_scoring_session(req)
         _validate_score_request(req)
         raw_results = score_tir_dataset(
             session_id,
@@ -133,7 +136,11 @@ async def tir_score(req: TIRScoreRequest):
                 )
             )
 
-        return TIRScoreResponse(session_id=session_id, results=results)
+        return TIRScoreResponse(
+            session_id=session_id,
+            session_token=issue_session_token(session_id),
+            results=results,
+        )
     except AppError as ex:
         logger.exception("Validation error in /api/tir/score")
         raise HTTPException(status_code=ex.status_code, detail=ex.to_detail()) from ex
@@ -148,6 +155,7 @@ async def tir_score(req: TIRScoreRequest):
 @app.post("/api/tir/save", dependencies=[Depends(enforce_rate_limit)])
 async def save_edited_markdown(req: SaveEditedRequest):
     try:
+        _assert_scoring_session(req.session_id, req.session_token)
         decoded_tir_id = req.tir_id
         try:
             from urllib.parse import unquote
@@ -155,6 +163,17 @@ async def save_edited_markdown(req: SaveEditedRequest):
             decoded_tir_id = unquote(req.tir_id)
         except Exception:
             logger.warning("Failed to decode tir_id %s, using raw value", req.tir_id)
+
+        decoded_tir_id = _normalize_tir_save_path(decoded_tir_id)
+        existing_results = load_structured_results(req.session_id)
+        in_session = any(item.get("tir_blob_path") == decoded_tir_id for item in existing_results)
+        if not in_session:
+            raise AppError(
+                "The selected TIR is not part of the current session results. Re-run scoring and try again.",
+                status_code=404,
+                code="tir_not_in_session",
+                details={"session_id": req.session_id, "tir_blob_path": decoded_tir_id},
+            )
 
         blob_name = f"{req.session_id}/{decoded_tir_id}.md"
         upload_result_markdown(blob_name, req.edited_markdown)
@@ -181,8 +200,9 @@ async def save_edited_markdown(req: SaveEditedRequest):
 
 
 @app.get("/api/tir/export/docx", dependencies=[Depends(enforce_rate_limit)])
-async def export_docx(session_id: str = Query(...)):
+async def export_docx(session_id: str = Query(...), session_token: str = Query(...)):
     try:
+        _assert_scoring_session(session_id, session_token)
         results = load_structured_results(session_id)
         if not results:
             raise HTTPException(status_code=404, detail="No TIR results found for this session")
@@ -200,8 +220,9 @@ async def export_docx(session_id: str = Query(...)):
 
 
 @app.get("/api/tir/export/pdf", dependencies=[Depends(enforce_rate_limit)])
-async def export_pdf(session_id: str = Query(...)):
+async def export_pdf(session_id: str = Query(...), session_token: str = Query(...)):
     try:
+        _assert_scoring_session(session_id, session_token)
         results = load_structured_results(session_id)
         if not results:
             raise HTTPException(status_code=404, detail="No TIR results found for this session")
@@ -390,3 +411,43 @@ def _validate_score_request(req: TIRScoreRequest) -> None:
                 code="fdsc_not_indexed",
                 details={"fdsc_doc_id": req.fdsc_doc_id, "ingestion_status": status},
             )
+
+
+def _normalize_tir_save_path(value: str) -> str:
+    cleaned = value.strip("/")
+    segments = cleaned.split("/")
+    if not cleaned or any(seg in {"", ".", ".."} for seg in segments):
+        raise AppError(
+            "Invalid TIR identifier.",
+            status_code=400,
+            code="invalid_tir_id",
+        )
+    if not _TIR_SAVE_PATH_PATTERN.fullmatch(cleaned):
+        raise AppError(
+            "Invalid characters in TIR identifier.",
+            status_code=400,
+            code="invalid_tir_id",
+        )
+    return cleaned
+
+
+def _resolve_or_create_scoring_session(req: TIRScoreRequest) -> str:
+    if not req.session_id:
+        return str(uuid4())
+    if not req.session_token:
+        raise AppError(
+            "Missing session token for existing session. Start a new scoring run or refresh the page.",
+            status_code=401,
+            code="missing_session_token",
+        )
+    _assert_scoring_session(req.session_id, req.session_token)
+    return req.session_id
+
+
+def _assert_scoring_session(session_id: str, session_token: str) -> None:
+    if not verify_session_token(session_id, session_token):
+        raise AppError(
+            "Session is invalid or expired. Re-run scoring to start a new session.",
+            status_code=401,
+            code="invalid_session",
+        )

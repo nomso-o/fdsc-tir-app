@@ -140,7 +140,8 @@ class TIR(BaseModel):
 
 
 class ScoreRequest(BaseModel):
-    session_id: str = Field(..., min_length=1, max_length=64)
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    session_token: Optional[str] = Field(default=None, min_length=32, max_length=2048)
     fdsc_index_name: str
     dataset_prefix: str = Field(..., min_length=1, max_length=128)
     fdsc_doc_id: Optional[str] = Field(default=None, max_length=128)
@@ -148,7 +149,9 @@ class ScoreRequest(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def _session(cls, value: str) -> str:
+    def _session(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
         return _validate_session_id(value)
 
     @field_validator("dataset_prefix")
@@ -192,11 +195,13 @@ ScoreResult = TIRSingleResult
 
 class TIRScoreResponse(BaseModel):
     session_id: str
+    session_token: str
     results: List[TIRSingleResult]
 
 
 class SaveEditedRequest(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=64)
+    session_token: str = Field(..., min_length=32, max_length=2048)
     tir_id: str
     edited_markdown: str
 

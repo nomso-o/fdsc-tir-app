@@ -1,22 +1,35 @@
 import React from "react";
 
 interface ExportButtonsProps {
-  sessionId: string;
+  sessionId: string | null;
+  sessionToken: string | null;
 }
 
-const ExportButtons: React.FC<ExportButtonsProps> = ({ sessionId }) => {
+const ExportButtons: React.FC<ExportButtonsProps> = ({ sessionId, sessionToken }) => {
   const exportDocx = () => {
-    window.open(`/api/tir/export/docx?session_id=${encodeURIComponent(sessionId)}`, "_blank");
+    if (!sessionId || !sessionToken) return;
+    window.open(
+      `/api/tir/export/docx?session_id=${encodeURIComponent(sessionId)}&session_token=${encodeURIComponent(sessionToken)}`,
+      "_blank"
+    );
   };
 
   const exportPdf = () => {
-    window.open(`/api/tir/export/pdf?session_id=${encodeURIComponent(sessionId)}`, "_blank");
+    if (!sessionId || !sessionToken) return;
+    window.open(
+      `/api/tir/export/pdf?session_id=${encodeURIComponent(sessionId)}&session_token=${encodeURIComponent(sessionToken)}`,
+      "_blank"
+    );
   };
 
   return (
     <div className="export-buttons">
-      <button onClick={exportDocx}>Export DOCX</button>
-      <button onClick={exportPdf}>Export PDF</button>
+      <button onClick={exportDocx} disabled={!sessionId || !sessionToken}>
+        Export DOCX
+      </button>
+      <button onClick={exportPdf} disabled={!sessionId || !sessionToken}>
+        Export PDF
+      </button>
     </div>
   );
 };

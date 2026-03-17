@@ -1,4 +1,5 @@
 from functools import lru_cache
+import secrets
 from typing import Optional
 
 from pydantic import AnyHttpUrl, Field, field_validator, model_validator
@@ -76,6 +77,11 @@ class Settings(BaseSettings):
     # API rate limiting defaults
     RATE_LIMIT_REQUESTS: int = Field(default=60, ge=1)
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    SESSION_TOKEN_SECRET: str = Field(
+        default_factory=lambda: secrets.token_urlsafe(48),
+        description="HMAC secret used to bind API session tokens to server-issued sessions.",
+    )
+    SESSION_TOKEN_TTL_SECONDS: int = Field(default=60 * 60 * 8, ge=300, le=60 * 60 * 24 * 30)
 
     # Document ingestion / chunking
     ENABLE_SEMANTIC_CHUNKING: bool = Field(default=True, env="ENABLE_SEMANTIC_CHUNKING")
@@ -103,6 +109,13 @@ class Settings(BaseSettings):
         if value and not value.endswith("/.default"):
             raise ValueError("Azure OpenAI auth scope must end with '/.default'")
         return value
+
+    @field_validator("SESSION_TOKEN_SECRET")
+    @classmethod
+    def _validate_session_secret(cls, value: str) -> str:
+        if not value or len(value.strip()) < 32:
+            raise ValueError("SESSION_TOKEN_SECRET must be set to a high-entropy value (>=32 chars).")
+        return value.strip()
 
     @field_validator("AZURE_COMOSDB_CONNECTION_STRING")
     @classmethod
@@ -154,6 +167,7 @@ class Settings(BaseSettings):
             "WORKSPACE_NAME",
             "KEY_VAULT_URI",
             "BLOB_ACCOUNT_URL",
+            "SESSION_TOKEN_SECRET",
         ]
         missing = [name for name in critical_fields if not getattr(self, name, None)]
         if missing:
