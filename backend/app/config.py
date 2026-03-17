@@ -2,7 +2,7 @@ from functools import lru_cache
 import secrets
 from typing import Optional
 
-from pydantic import AnyHttpUrl, Field, field_validator, model_validator
+from pydantic import AliasChoices, AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -13,8 +13,12 @@ class Settings(BaseSettings):
     """
 
     # Cosmos DB / chat history
-    AZURE_COMOSDB_CONNECTION_STRING: Optional[str] = Field(
-        default=None, env="AZURE_COMOSDB_CONNECTION_STRING"
+    AZURE_COSMOSDB_CONNECTION_STRING: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AZURE_COSMOSDB_CONNECTION_STRING",
+            "AZURE_COMOSDB_CONNECTION_STRING",
+        ),
     )
     AZURE_COSMOSDB_ENDPOINT: AnyHttpUrl = Field(..., env="AZURE_COSMOSDB_ENDPOINT")
     AZURE_COSMOSDB_NAME: str = Field(..., env="AZURE_COSMOSDB_NAME")
@@ -117,7 +121,7 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_TOKEN_SECRET must be set to a high-entropy value (>=32 chars).")
         return value.strip()
 
-    @field_validator("AZURE_COMOSDB_CONNECTION_STRING")
+    @field_validator("AZURE_COSMOSDB_CONNECTION_STRING")
     @classmethod
     def _validate_cosmos_connection_string(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -146,7 +150,7 @@ class Settings(BaseSettings):
 
         if not self.USE_MANAGED_IDENTITY:
             # Fallback path requires either connection strings or Key Vault secrets.
-            if not (self.AZURE_COMOSDB_CONNECTION_STRING and self.BLOB_CONNECTION_STRING):
+            if not (self.AZURE_COSMOSDB_CONNECTION_STRING and self.BLOB_CONNECTION_STRING):
                 missing.append("Connection strings for Cosmos + Blob when not using managed identity")
         if missing:
             raise ValueError("; ".join(missing))

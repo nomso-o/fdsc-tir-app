@@ -100,8 +100,8 @@ def _build_cosmos_client() -> CosmosClient:
             url=str(settings.AZURE_COSMOSDB_ENDPOINT),
             credential=_token_credential,
         )
-    if settings.AZURE_COMOSDB_CONNECTION_STRING:
-        return CosmosClient.from_connection_string(settings.AZURE_COMOSDB_CONNECTION_STRING)
+    if settings.AZURE_COSMOSDB_CONNECTION_STRING:
+        return CosmosClient.from_connection_string(settings.AZURE_COSMOSDB_CONNECTION_STRING)
 
     raise ValueError("Cosmos DB authentication is not configured.")
 
