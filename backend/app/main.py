@@ -2,7 +2,7 @@ import logging
 from uuid import uuid4
 from typing import List
 
-from fastapi import FastAPI, HTTPException, Response, Query
+from fastapi import Depends, FastAPI, HTTPException, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .logging_config import setup_logging
@@ -22,6 +22,7 @@ from .services.storage_service import (
     update_markdown_in_results,
 )
 from .services.export_service import build_docx_from_results, build_pdf_from_results
+from .utils.rate_limit import enforce_rate_limit
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -42,7 +43,11 @@ async def healthcheck():
     return {"status": "ok"}
 
 
-@app.post("/api/chat/message", response_model=ChatResponse)
+@app.post(
+    "/api/chat/message",
+    response_model=ChatResponse,
+    dependencies=[Depends(enforce_rate_limit)],
+)
 async def chat_message(req: ChatRequest):
     try:
         chat_runnable = build_fdsc_chat_runnable(req.fdsc_index_name)
@@ -71,7 +76,11 @@ async def chat_message(req: ChatRequest):
         raise HTTPException(status_code=500, detail="Chat failed") from ex
 
 
-@app.post("/api/tir/score", response_model=TIRScoreResponse)
+@app.post(
+    "/api/tir/score",
+    response_model=TIRScoreResponse,
+    dependencies=[Depends(enforce_rate_limit)],
+)
 async def tir_score(req: TIRScoreRequest):
     try:
         session_id = req.session_id or str(uuid4())
@@ -96,7 +105,7 @@ async def tir_score(req: TIRScoreRequest):
         raise HTTPException(status_code=500, detail="Scoring failed") from ex
 
 
-@app.post("/api/tir/save")
+@app.post("/api/tir/save", dependencies=[Depends(enforce_rate_limit)])
 async def save_edited_markdown(req: SaveEditedRequest):
     try:
         decoded_tir_id = req.tir_id
@@ -118,7 +127,7 @@ async def save_edited_markdown(req: SaveEditedRequest):
         raise HTTPException(status_code=500, detail="Save failed") from ex
 
 
-@app.get("/api/tir/export/docx")
+@app.get("/api/tir/export/docx", dependencies=[Depends(enforce_rate_limit)])
 async def export_docx(session_id: str = Query(...)):
     try:
         results = load_structured_results(session_id)
@@ -137,7 +146,7 @@ async def export_docx(session_id: str = Query(...)):
         raise HTTPException(status_code=500, detail="Export DOCX failed") from ex
 
 
-@app.get("/api/tir/export/pdf")
+@app.get("/api/tir/export/pdf", dependencies=[Depends(enforce_rate_limit)])
 async def export_pdf(session_id: str = Query(...)):
     try:
         results = load_structured_results(session_id)

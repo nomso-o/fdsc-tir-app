@@ -3,11 +3,8 @@ from typing import List
 from langchain_core.documents import Document
 from azure.search.documents.models import Vector
 from ..azure_clients import embeddings, get_search_client
-from ..config import get_settings
 
 logger = logging.getLogger(__name__)
-
-settings = get_settings()
 
 
 class FDSCHybridRetriever:

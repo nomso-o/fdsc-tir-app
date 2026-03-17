@@ -1,5 +1,4 @@
 import logging
-from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
     SearchIndex,
@@ -10,6 +9,7 @@ from azure.search.documents.indexes.models import (
     VectorSearchProfile,
 )
 from backend.app.config import get_settings
+from backend.app.azure_auth import get_token_credential
 from backend.app.logging_config import setup_logging
 
 setup_logging()
@@ -18,9 +18,10 @@ settings = get_settings()
 
 
 def ensure_fdsc_index(index_name: str = "fdsc-index"):
+    credential = get_token_credential()
     client = SearchIndexClient(
-        endpoint=f"https://{settings.AZURE_SEARCH_NAME}.search.windows.net",
-        credential=AzureKeyCredential(settings.AZURE_SEARCH_KEY),
+        endpoint=f"https://{settings.AZURE_SEARCH_NAME}.search.azure.us",
+        credential=credential,
     )
 
     existing = [i.name for i in client.list_indexes()]
