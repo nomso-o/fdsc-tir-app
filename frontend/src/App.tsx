@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import ChatPanel from "./components/ChatPanel";
 import TIRAnalysisPanel from "./components/TIRAnalysisPanel";
+import FDSCDocumentManager from "./components/FDSCDocumentManager";
 
 const App: React.FC = () => {
   const [sessionId] = useState(() => crypto.randomUUID());
@@ -12,6 +13,7 @@ const App: React.FC = () => {
       </header>
       <main className="app-main">
         <section className="main-left">
+          <FDSCDocumentManager />
           <TIRAnalysisPanel sessionId={sessionId} />
         </section>
         <section className="main-right">

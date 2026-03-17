@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import api from "../api/client";
+import React, { useEffect, useState } from "react";
+import api, { extractApiError } from "../api/client";
 import ExportButtons from "./ExportButtons";
 import ThinkingDrawer from "./ThinkingDrawer";
 
@@ -7,7 +7,14 @@ interface TIRAnalysisPanelProps {
   sessionId: string;
 }
 
+interface PrefixOption {
+  value: string;
+  label: string;
+}
+
 interface TIRSingleResult {
+  tir_id: string;
+  dataset_prefix: string;
   tir_blob_path: string;
   rationale: string;
   markdown_table: string;
@@ -19,26 +26,83 @@ interface TIRSingleResult {
 const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
   const [fdscIndexName, setFdscIndexName] = useState("fdsc-index");
   const [datasetPrefix, setDatasetPrefix] = useState("");
+  const [datasetOptions, setDatasetOptions] = useState<PrefixOption[]>([]);
+  const [fdscDocs, setFdscDocs] = useState<PrefixOption[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState("");
   const [results, setResults] = useState<TIRSingleResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editedMarkdown, setEditedMarkdown] = useState("");
   const [thinkingOpen, setThinkingOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [datasetLoading, setDatasetLoading] = useState(false);
+  const [docsLoading, setDocsLoading] = useState(false);
+
+  useEffect(() => {
+    const loadPrefixes = async () => {
+      setDatasetLoading(true);
+      try {
+        const resp = await api.get("/tir/prefixes");
+        const prefixes = (resp.data?.prefixes as PrefixOption[]) || [];
+        setDatasetOptions(prefixes);
+        setDatasetPrefix((prev) => (prev ? prev : prefixes[0]?.value ?? ""));
+        if (prefixes.length === 0) {
+          setError("No TIR datasets found. Upload datasets to Azure Blob first.");
+        }
+      } catch (err) {
+        console.error(err);
+        setError(extractApiError(err, "Failed to load available TIR datasets."));
+      } finally {
+        setDatasetLoading(false);
+      }
+    };
+    loadPrefixes();
+  }, []);
+
+  useEffect(() => {
+    const loadDocs = async () => {
+      if (!fdscIndexName) return;
+      setDocsLoading(true);
+      try {
+        const resp = await api.get("/fdsc/prefixes", {
+          params: { fdsc_index_name: fdscIndexName }
+        });
+        const docs = (resp.data?.prefixes as PrefixOption[]) || [];
+        setFdscDocs(docs);
+        setSelectedDocId((prev) => {
+          if (!docs.length) {
+            return "";
+          }
+          const exists = docs.find((doc) => doc.value === prev);
+          return exists ? prev : docs[0].value;
+        });
+      } catch (err) {
+        console.error(err);
+        setError(extractApiError(err, "Failed to load FDSC documents."));
+      } finally {
+        setDocsLoading(false);
+      }
+    };
+    loadDocs();
+  }, [fdscIndexName]);
 
   const runScoring = async () => {
     if (!datasetPrefix) {
-      setError("Please enter a dataset prefix.");
+      setError("Please select a dataset to score.");
       return;
     }
     setError(null);
     setLoading(true);
     try {
-      const resp = await api.post("/tir/score", {
+      const payload: Record<string, any> = {
         session_id: sessionId,
         fdsc_index_name: fdscIndexName,
         dataset_prefix: datasetPrefix
-      });
+      };
+      if (selectedDocId) {
+        payload.fdsc_doc_id = selectedDocId;
+      }
+      const resp = await api.post("/tir/score", payload);
       const res = resp.data.results as TIRSingleResult[];
       setResults(res);
       if (res.length > 0) {
@@ -50,7 +114,7 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
       }
     } catch (err) {
       console.error(err);
-      setError("Error scoring incident reports. Check backend logs.");
+      setError(extractApiError(err, "Error scoring incident reports."));
     } finally {
       setLoading(false);
     }
@@ -75,7 +139,7 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
       setResults(updated);
     } catch (err) {
       console.error(err);
-      setError("Error saving edited markdown.");
+      setError(extractApiError(err, "Error saving edited markdown."));
     }
   };
 
@@ -92,13 +156,38 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
             onChange={(e) => setFdscIndexName(e.target.value)}
           />
         </div>
-        <div>
-          <label>TIR Dataset Prefix:</label>
-          <input
+        <div className="doc-select">
+          <label>FDSC Document:</label>
+          <select
+            value={selectedDocId}
+            onChange={(e) => setSelectedDocId(e.target.value)}
+            disabled={docsLoading || fdscDocs.length === 0}
+          >
+            <option value="">All Documents</option>
+            {fdscDocs.map((doc) => (
+              <option key={doc.value} value={doc.value}>
+                {doc.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="dataset-select">
+          <label>TIR Dataset:</label>
+          <select
             value={datasetPrefix}
             onChange={(e) => setDatasetPrefix(e.target.value)}
-            placeholder="e.g. dataset-2025/"
-          />
+            disabled={datasetLoading || datasetOptions.length === 0}
+          >
+            {datasetOptions.length === 0 ? (
+              <option value="">No datasets available</option>
+            ) : (
+              datasetOptions.map((prefix) => (
+                <option key={prefix.value} value={prefix.value}>
+                  {prefix.label}
+                </option>
+              ))
+            )}
+          </select>
         </div>
         <button onClick={runScoring} disabled={loading}>
           {loading ? "Scoring..." : "Score Incident Reports"}
@@ -114,7 +203,7 @@ const TIRAnalysisPanel: React.FC<TIRAnalysisPanelProps> = ({ sessionId }) => {
             <ul>
               {results.map((r, idx) => (
                 <li
-                  key={idx}
+                  key={r.tir_id}
                   className={selectedIndex === idx ? "selected" : ""}
                   onClick={() => handleSelect(idx)}
                 >

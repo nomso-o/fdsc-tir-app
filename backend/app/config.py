@@ -71,10 +71,27 @@ class Settings(BaseSettings):
 
     # HTTP client configuration
     AZURE_HTTP_POOL_MAX: int = Field(default=32, ge=1, le=1024)
+    AZURE_HTTP_TIMEOUT_SECONDS: int = Field(default=30, ge=5, le=300)
 
     # API rate limiting defaults
     RATE_LIMIT_REQUESTS: int = Field(default=60, ge=1)
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
+
+    # Document ingestion / chunking
+    ENABLE_SEMANTIC_CHUNKING: bool = Field(default=True, env="ENABLE_SEMANTIC_CHUNKING")
+    FDSC_DEFAULT_NAMESPACE: str = Field(default="default", env="FDSC_DEFAULT_NAMESPACE")
+    FDSC_UPLOAD_MAX_BYTES: int = Field(default=25 * 1024 * 1024, ge=1024)
+    FDSC_INGESTION_INDEX_TIMEOUT_SECONDS: int = Field(default=60, ge=5, le=600)
+    FDSC_FIXED_CHUNK_SIZE: int = Field(default=1200, ge=200, le=10000)
+    FDSC_FIXED_CHUNK_OVERLAP: int = Field(default=200, ge=0, le=5000)
+    FDSC_SEMANTIC_MAX_CHARS: int = Field(default=1600, ge=200, le=10000)
+    FDSC_SEMANTIC_MIN_CHARS: int = Field(default=400, ge=50, le=5000)
+    FDSC_SEMANTIC_HEADING_PATTERN: str = Field(
+        default=r"^[A-Z0-9][A-Z0-9 .:/_-]{3,}$",
+        description="Regex used to detect heading boundaries for semantic chunking.",
+    )
+    AZURE_DOC_INTEL_ENDPOINT: AnyHttpUrl
+    AZURE_DOC_INTEL_MODEL_ID: str = Field(default="prebuilt-layout")
 
     class Config:
         env_file = ".env"

@@ -15,6 +15,8 @@ var searchName = toLower('${baseName}-search')
 var cosmosName = '${baseName}-cosmos'
 var keyVaultName = '${baseName}-kv'
 var openAiName = '${baseName}-openai'
+var docIntelName = '${baseName}-docintel'
+var cosmosDatabaseName = '${baseName}-db'
 
 resource fdscIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${baseName}-uami'
@@ -36,6 +38,35 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     publicNetworkAccess: 'Disabled'
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource tirDatasetsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'tir-datasets'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource tirResultsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'tir-results'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource fdscDocsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'fdsc-docs'
+  properties: {
+    publicAccess: 'None'
   }
 }
 
@@ -75,6 +106,68 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
   }
 }
 
+resource cosmosSqlDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' = {
+  parent: cosmos
+  name: cosmosDatabaseName
+  properties: {
+    resource: {
+      id: cosmosDatabaseName
+    }
+    options: {}
+  }
+}
+
+resource chatHistoryContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+  parent: cosmosSqlDb
+  name: 'chat_history'
+  properties: {
+    resource: {
+      id: 'chat_history'
+      partitionKey: {
+        paths: [
+          '/session_id'
+        ]
+        kind: 'Hash'
+      }
+    }
+    options: {}
+  }
+}
+
+resource tirScoresContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+  parent: cosmosSqlDb
+  name: 'tir_scores'
+  properties: {
+    resource: {
+      id: 'tir_scores'
+      partitionKey: {
+        paths: [
+          '/session_id'
+        ]
+        kind: 'Hash'
+      }
+    }
+    options: {}
+  }
+}
+
+resource fdscDocumentsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+  parent: cosmosSqlDb
+  name: 'fdsc_documents'
+  properties: {
+    resource: {
+      id: 'fdsc_documents'
+      partitionKey: {
+        paths: [
+          '/id'
+        ]
+        kind: 'Hash'
+      }
+    }
+    options: {}
+  }
+}
+
 resource openai 'Microsoft.CognitiveServices/accounts@2023-10-01' = {
   name: openAiName
   location: location
@@ -85,6 +178,20 @@ resource openai 'Microsoft.CognitiveServices/accounts@2023-10-01' = {
   }
   properties: {
     customSubDomainName: '${baseName}-openai'
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource docintel 'Microsoft.CognitiveServices/accounts@2023-10-01' = {
+  name: docIntelName
+  location: location
+  tags: tags
+  kind: 'FormRecognizer'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: '${baseName}-docintel'
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -140,3 +247,5 @@ output storageAccountId string = storage.id
 output searchEndpoint string = search.properties.hostName
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
 output openAiEndpoint string = openai.properties.endpoint
+output docIntelEndpoint string = docintel.properties.endpoint
+output cosmosDatabaseName string = cosmosDatabaseName

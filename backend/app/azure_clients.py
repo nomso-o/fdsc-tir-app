@@ -7,6 +7,7 @@ from azure.core.pipeline.transport import RequestsTransport
 from azure.search.documents import SearchClient
 from azure.storage.blob import BlobServiceClient
 from azure.cosmos import CosmosClient
+from azure.ai.documentintelligence import DocumentIntelligenceClient
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 
 from .azure_auth import get_openai_token_provider, get_secret_value, get_token_credential
@@ -17,7 +18,11 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 _token_credential = get_token_credential()
 _openai_token_provider = get_openai_token_provider()
-_transport = RequestsTransport(connection_pool_maxsize=settings.AZURE_HTTP_POOL_MAX)
+_transport = RequestsTransport(
+    connection_pool_maxsize=settings.AZURE_HTTP_POOL_MAX,
+    connection_timeout=settings.AZURE_HTTP_TIMEOUT_SECONDS,
+    read_timeout=settings.AZURE_HTTP_TIMEOUT_SECONDS,
+)
 
 
 llm = AzureChatOpenAI(
@@ -33,6 +38,11 @@ embeddings = AzureOpenAIEmbeddings(
     azure_deployment=settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
     api_version=settings.AZURE_OPENAI_API_VERSION,
     azure_ad_token_provider=_openai_token_provider,
+)
+
+doc_intel_client = DocumentIntelligenceClient(
+    endpoint=str(settings.AZURE_DOC_INTEL_ENDPOINT),
+    credential=_token_credential,
 )
 
 

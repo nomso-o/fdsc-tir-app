@@ -72,6 +72,24 @@ resource "azurerm_storage_account" "datasets" {
   }
 }
 
+resource "azurerm_storage_container" "tir_datasets" {
+  name                  = "tir-datasets"
+  storage_account_name  = azurerm_storage_account.datasets.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "tir_results" {
+  name                  = "tir-results"
+  storage_account_name  = azurerm_storage_account.datasets.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "fdsc_docs" {
+  name                  = "fdsc-docs"
+  storage_account_name  = azurerm_storage_account.datasets.name
+  container_access_type = "private"
+}
+
 resource "azurerm_cognitive_account" "openai" {
   name                = "${var.base_name}-openai"
   location            = azurerm_resource_group.fdsc.location
@@ -80,6 +98,21 @@ resource "azurerm_cognitive_account" "openai" {
   sku_name            = "S0"
   custom_subdomain_name = "${var.base_name}-openai"
   tags                = var.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.fdsc.id]
+  }
+}
+
+resource "azurerm_cognitive_account" "docintel" {
+  name                  = "${var.base_name}-docintel"
+  location              = azurerm_resource_group.fdsc.location
+  resource_group_name   = azurerm_resource_group.fdsc.name
+  kind                  = "FormRecognizer"
+  sku_name              = "S0"
+  custom_subdomain_name = "${var.base_name}-docintel"
+  tags                  = var.tags
 
   identity {
     type         = "UserAssigned"
@@ -131,6 +164,36 @@ resource "azurerm_cosmosdb_account" "fdsc" {
     location          = azurerm_resource_group.fdsc.location
     failover_priority = 0
   }
+}
+
+resource "azurerm_cosmosdb_sql_database" "app" {
+  name                = "${var.base_name}-db"
+  resource_group_name = azurerm_resource_group.fdsc.name
+  account_name        = azurerm_cosmosdb_account.fdsc.name
+}
+
+resource "azurerm_cosmosdb_sql_container" "chat_history" {
+  name                = "chat_history"
+  resource_group_name = azurerm_resource_group.fdsc.name
+  account_name        = azurerm_cosmosdb_account.fdsc.name
+  database_name       = azurerm_cosmosdb_sql_database.app.name
+  partition_key_path  = "/session_id"
+}
+
+resource "azurerm_cosmosdb_sql_container" "tir_scores" {
+  name                = "tir_scores"
+  resource_group_name = azurerm_resource_group.fdsc.name
+  account_name        = azurerm_cosmosdb_account.fdsc.name
+  database_name       = azurerm_cosmosdb_sql_database.app.name
+  partition_key_path  = "/session_id"
+}
+
+resource "azurerm_cosmosdb_sql_container" "fdsc_documents" {
+  name                = "fdsc_documents"
+  resource_group_name = azurerm_resource_group.fdsc.name
+  account_name        = azurerm_cosmosdb_account.fdsc.name
+  database_name       = azurerm_cosmosdb_sql_database.app.name
+  partition_key_path  = "/id"
 }
 
 resource "azurerm_key_vault" "fdsc" {
@@ -186,6 +249,26 @@ output storage_account_primary_blob_endpoint {
 }
 
 output search_service_endpoint {
-  value       = "https://${azurerm_search_service.fdsc.name}.search.windows.net"
-  description = "Search service endpoint (use Managed Identity rather than admin keys)."
+  value       = "https://${azurerm_search_service.fdsc.name}.search.azure.us"
+  description = "Search service endpoint expected by backend code."
+}
+
+output cosmos_endpoint {
+  value       = azurerm_cosmosdb_account.fdsc.endpoint
+  description = "Cosmos DB account endpoint."
+}
+
+output cosmos_database_name {
+  value       = azurerm_cosmosdb_sql_database.app.name
+  description = "Cosmos DB SQL database name used by the app."
+}
+
+output openai_endpoint {
+  value       = azurerm_cognitive_account.openai.endpoint
+  description = "Azure OpenAI endpoint."
+}
+
+output docintel_endpoint {
+  value       = azurerm_cognitive_account.docintel.endpoint
+  description = "Azure Document Intelligence endpoint."
 }

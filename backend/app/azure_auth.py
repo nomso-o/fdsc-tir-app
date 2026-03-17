@@ -56,4 +56,4 @@ def get_openai_token_provider():
     """
     settings = get_settings()
     credential = get_token_credential()
-    return get_bearer_token_provider(credential, scopes=[settings.AZURE_OPENAI_AUTH_SCOPE])
+    return get_bearer_token_provider(credential, settings.AZURE_OPENAI_AUTH_SCOPE)
